@@ -1,0 +1,76 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  YOUR PERSONAL TRAINING + HEALTH DATA — NEVER COMMITTED
+#
+#  This repo ships CODE ONLY. Everything the coach learns about you stays on your
+#  machine. If you fork this and push, none of the paths below travel with it.
+#
+#  If you WANT your own data versioned, do it in a SEPARATE PRIVATE repo — never
+#  by un-ignoring these lines in a public fork.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Athlete wiki — profile, body composition, labs, goals, coach notes
+wiki.md
+!templates/wiki-template.md
+
+# Canonical coach state + weekly plans
+state/
+coach-state.json
+dashboard/data/
+
+# Long-term memory (may contain sensitive health context)
+memory/
+
+# Captured biometrics: glucose, sleep, HRV, rides, sessions
+metrics/
+
+# Generated charts + reports (contain your health data as images/HTML)
+charts/
+reports/
+!reports/generate_*.py
+
+# Route files — GPX start/end coordinates reveal home and workplace
+routes/
+*.gpx
+*.tcx
+*.fit
+
+# Hevy routine exports
+hevy_routines/
+
+# Multi-user runtime data — other people's health data + the SQLite DB
+data/
+
+# ── Genetic data — raw exports NEVER commit ──
+genome/
+*genome*.txt
+*23andme*
+*23andMe*
+*AncestryDNA*
+*.vcf
+*.vcf.gz
+dna_raw*
+
+# ── Secrets ──
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.config/
+*_api_key
+*api_key*
+.update-check.json
+
+# ── Local machine / build artifacts ──
+.claude/settings.local.json
+node_modules/
+dist/
+build/
+__pycache__/
+*.pyc
+.venv/
+venv/
+dashboard/logs/*
+!dashboard/logs/.gitkeep
+.DS_Store
+Thumbs.db

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.leo.coach-cloudflared</string>
+
+  <!-- Runs the NAMED tunnel "coach" created via `cloudflared tunnel create coach`.
+       Do NOT switch this to `tunnel --url ...` (that is a public, unauthenticated URL).
+       Pair the tunnel with a Cloudflare Access policy so only you can reach it. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/cloudflared</string>
+    <string>tunnel</string>
+    <string>run</string>
+    <string>coach</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/YOUR_USERNAME/Claude-coach/dashboard/logs/cloudflared.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/YOUR_USERNAME/Claude-coach/dashboard/logs/cloudflared.err.log</string>
+</dict>
+</plist>

@@ -1,0 +1,57 @@
+{
+  "workoutName": "Bikeplan Demo (Tier 2)",
+  "sportType": "cycling",
+  "steps": [
+    {
+      "stepOrder": 1,
+      "type": "interval",
+      "durationType": "distance",
+      "meters": null,
+      "targetType": "power.zone",
+      "targetLow": 208,
+      "targetHigh": 243,
+      "description": "Steady \u2014 hold target, spin \u226585 rpm on the flats"
+    },
+    {
+      "stepOrder": 2,
+      "type": "interval",
+      "durationType": "distance",
+      "meters": 5300,
+      "targetType": "power.zone",
+      "targetLow": 217,
+      "targetHigh": 240,
+      "description": "Climb 1 \u2014 5.4% for 5300m @ ~229W (1.96 W/kg)"
+    },
+    {
+      "stepOrder": 3,
+      "type": "interval",
+      "durationType": "distance",
+      "meters": null,
+      "targetType": "power.zone",
+      "targetLow": 208,
+      "targetHigh": 243,
+      "description": "Steady \u2014 hold target, spin \u226585 rpm on the flats"
+    },
+    {
+      "stepOrder": 4,
+      "type": "interval",
+      "durationType": "distance",
+      "meters": 4300,
+      "targetType": "power.zone",
+      "targetLow": 218,
+      "targetHigh": 241,
+      "description": "Climb 2 \u2014 6.1% for 4300m @ ~230W (1.97 W/kg)"
+    },
+    {
+      "stepOrder": 5,
+      "type": "cooldown",
+      "durationType": "open",
+      "targetType": "power.zone",
+      "targetLow": 197,
+      "targetHigh": 236,
+      "description": "Run it home at target"
+    }
+  ],
+  "estimated_time_s": 5844.210190906309,
+  "note": "targets in watts; push via manage_workouts upload+schedule"
+}

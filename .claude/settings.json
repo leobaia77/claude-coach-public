@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '=== COACH CURRENT STATE (canonical source of truth — overrides any conversation summary; re-read before answering plan/eval questions) ===\\n\\n'; cat \"$CLAUDE_PROJECT_DIR/state/current.md\" 2>/dev/null",
+            "timeout": 10,
+            "statusMessage": "Loading coach state..."
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/check_update.mjs\" --quiet 2>/dev/null || true",
+            "timeout": 8,
+            "statusMessage": "Checking for updates..."
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreCompact\",\"additionalContext\":\"REMINDER: state/current.md is the canonical current state and overrides this summary. Before relying on the summary, re-read that file. If the plan changed or a workout was logged this session and is not yet in current.md, update it now so it survives compaction.\"}}'",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "_comment_auto_sync": [
+    "There is deliberately NO Stop hook here that commits and pushes.",
+    "",
+    "The author's own setup uses one to auto-sync his coach data to a PRIVATE repo.",
+    "That is NOT shipped as a default, because a `git add -A && git push` hook combined",
+    "with a public remote would publish your training, biometric and health data.",
+    "",
+    "If you want auto-sync, you must (1) confirm your remote is PRIVATE, (2) decide",
+    "whether to un-ignore the personal-data paths in .gitignore, and (3) add the hook",
+    "yourself. See the 'Optional: auto-sync your data' section in README.md.",
+    "",
+    "Defaults should be safe. This one is."
+  ]
+}
