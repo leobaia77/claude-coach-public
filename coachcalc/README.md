@@ -22,6 +22,12 @@ Run any module's self-test: `python3 -m coachcalc.<module>`.
 - **`rideeval.py`** — Appendix B ride metrics, the single source of truth for report scripts.
   `evaluate_ride(stream, ftp_w, mass_kg)` → NP/IF/TSS/VI, avg/max, W/kg, mean-max power
   curve, terrain distribution, Pw:HR `decoupling(...)`. Reuses the `bikeplan` primitives.
+- **`glucose.py`** — CGM state/event decomposition and the fasting-window refeed gate.
+  `decompose()` (rolling-median baseline + event residual — a spike can't drag its own
+  baseline), `summarize()`/`time_below()` (time-weighted, **gap-aware** — a sensor dropout is
+  not data), `fasting_window()`, `refeed_gate()` (nadir ≥70 and 0 min <60 on the FASTING
+  window only), `excursions()` (peak, Δ, minutes-to-peak, **rebound nadir**),
+  `post_meal_hours(high_fat)` (4 h normally, **6 h after a high-fat meal**).
 - **`strain.py`** — coach-side analog to Oura's Symptom Radar. `physio_strain()` (combination-
   gated multivariate deviation vs personal baselines), `session_load()`/`acute_load()` (Foster
   sRPE for lifts + heat-adjusted TSS for rides → EWMA acute load), `strain_index()` (0–100

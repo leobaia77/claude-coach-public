@@ -1,6 +1,6 @@
 """
 Fueling & hydration plan derived from the race model's energy cost + duration.
-Grounded in the coach's nutrition rules (Appendix D) + Leo's electrolyte fix
+Grounded in the coach's nutrition rules (Appendix D) + the athlete's electrolyte rules
 (sodium 500-800 mg/h before+during, more in heat — bilateral-cramp history).
 """
 from __future__ import annotations
@@ -47,7 +47,7 @@ def build_fuel_plan(kj: float, duration_s: float, temp_c: float = 22.0,
     elif temp_c >= 24:
         fluid = 750
 
-    # Sodium: Leo's rule 500-800 mg/h; take the HIGH end in heat / given cramp history.
+    # Sodium: reference rule 500-800 mg/h; take the HIGH end in heat / given cramp history.
     sodium = 600
     if temp_c >= 24:
         sodium = 800

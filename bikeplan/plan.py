@@ -54,10 +54,12 @@ class SegPlan:
 def make_plan(course: Course, rider: Rider, target_if: float,
               temp_c: float = 22.0, elevation_m: float = 100.0,
               headwind_mps: float = 0.0, strategy: str = "optimized",
-              w_prime_j: float = 20000.0, cp_w: float | None = None):
+              w_prime_j: float = 20000.0, cp_w: float | None = None,
+              body_mass_kg: float | None = None):
     rho = air_density(temp_c, elevation_m)
     ftp_cap = 1.20 * rider.ftp_w
     opt_meta = None
+    body_kg = body_mass_kg if body_mass_kg else rider.mass_kg
 
     def pseries_of(segs):
         ps = []
@@ -78,11 +80,12 @@ def make_plan(course: Course, rider: Rider, target_if: float,
                         round(s.power_w), round(s.speed_mps * 3.6, 1), s.time_s)
                 for s in oseg]
         total_t = sum(s.time_s for s in segs)
+        work_j = sum(sp.power_w * sp.time_s for sp in segs)
         pseries = pseries_of(segs)
     else:
         # grade-banded heuristic scaled to target NP (v1 fallback)
         def simulate(base: float):
-            segs, pseries, total_t = [], [], 0.0
+            segs, pseries, total_t, work_j = [], [], 0.0, 0.0
             for s in course.segments:
                 tgt = max(min(base * grade_factor(s.grade), ftp_cap), 0.0)
                 v = max(speed_for_power(tgt, s.grade, rider, rho, headwind_mps), 0.5)
@@ -93,21 +96,22 @@ def make_plan(course: Course, rider: Rider, target_if: float,
                 n = max(1, int(round(t)))
                 pseries.extend([p_actual] * min(n, 100000))
                 total_t += t
-            return segs, pseries, total_t
+                work_j += p_actual * t
+            return segs, pseries, total_t, work_j
         target_np = target_if * rider.ftp_w
         lo, hi = 0.4 * rider.ftp_w, 1.1 * rider.ftp_w
-        segs = pseries = None; total_t = 0.0
+        segs = pseries = None; total_t = work_j = 0.0
         for _ in range(24):
             base = 0.5 * (lo + hi)
-            segs, pseries, total_t = simulate(base)
+            segs, pseries, total_t, work_j = simulate(base)
             if normalized_power(pseries) < target_np:
                 lo = base
             else:
                 hi = base
 
     np_ = normalized_power(pseries)
-    avg_p = sum(sp.power_w * sp.time_s for sp in segs) / total_t
-    work_kj = sum(sp.power_w * sp.time_s for sp in segs) / 1000.0
+    avg_p = work_j / total_t
+    work_kj = work_j / 1000.0
     if_ = np_ / rider.ftp_w
     tss_ = tss(np_, if_, total_t, rider.ftp_w)
     fuel = build_fuel_plan(work_kj, total_t, temp_c, if_)
@@ -132,7 +136,7 @@ def make_plan(course: Course, rider: Rider, target_if: float,
             "start_m": round(cl.start_m),
             "length_m": round(cl.length_m), "avg_grade": round(cl.avg_grade * 100, 1),
             "gain_m": round(cl.gain_m), "power_w": round(cavg),
-            "wkg": round(cavg / rider.mass_kg, 2), "speed_kmh": round(cvel, 1),
+            "wkg": round(cavg / body_kg, 2), "speed_kmh": round(cvel, 1),
             "time_min": round(ct / 60, 1),
         })
 
@@ -145,8 +149,8 @@ def make_plan(course: Course, rider: Rider, target_if: float,
         "avg_speed_kmh": round(course.total_m / total_t * 3.6, 1),
         "segments": segs, "climbs": climb_rows, "fuel": fuel,
         "grad_dist": grad_dist, "strategy": strategy, "opt": opt_meta,
-        "rider": {"mass_kg": round(rider.mass_kg, 1), "ftp": rider.ftp_w,
-                  "cda": rider.cda, "crr": rider.crr},
+        "rider": {"mass_kg": round(rider.mass_kg, 1), "body_mass_kg": round(body_kg, 1),
+                  "ftp": rider.ftp_w, "cda": rider.cda, "crr": rider.crr},
         "conditions": {"temp_c": temp_c, "elevation_m": elevation_m,
                        "headwind_mps": headwind_mps, "target_if": target_if},
     }
@@ -169,10 +173,41 @@ def _parse_time(txt: str) -> float:
     return float(txt) * 60.0
 
 
+_GARMIN_SPORT = {"sportTypeId": 2, "sportTypeKey": "cycling", "displayOrder": 2}
+_GARMIN_STEP_TYPES = {"warmup": 1, "cooldown": 2, "interval": 3, "recovery": 4}
+_GARMIN_END_CONDITIONS = {"lap.button": 1, "time": 2, "distance": 3}
+
+
+def _garmin_step(order: int, step_type: str, end_type: str, end_value: float,
+                 target_low: float, target_high: float, description: str) -> dict:
+    """One ExecutableStepDTO in Garmin's native schema (Appendix A Step F).
+    end_value is METRES for distance steps, SECONDS for time steps."""
+    return {
+        "type": "ExecutableStepDTO", "stepId": None, "stepOrder": order,
+        "stepType": {"stepTypeId": _GARMIN_STEP_TYPES[step_type],
+                     "stepTypeKey": step_type,
+                     "displayOrder": _GARMIN_STEP_TYPES[step_type]},
+        "childStepId": None, "description": description,
+        "endCondition": {"conditionTypeId": _GARMIN_END_CONDITIONS[end_type],
+                         "conditionTypeKey": end_type,
+                         "displayOrder": _GARMIN_END_CONDITIONS[end_type],
+                         "displayable": True},
+        "endConditionValue": float(end_value),
+        "preferredEndConditionUnit": None, "endConditionCompare": None,
+        "targetType": {"workoutTargetTypeId": 2, "workoutTargetTypeKey": "power.zone",
+                       "displayOrder": 2},
+        "targetValueOne": float(target_low), "targetValueTwo": float(target_high),
+        "zoneNumber": None,
+    }
+
+
 def garmin_workout(plan: dict, name: str) -> dict:
-    """Export the plan as a Garmin structured cycling workout: one power-target
-    step per climb + steady blocks between. Matches the manage_workouts payload
-    shape (power.zone targets in watts). Ready to push via the Garmin MCP."""
+    """Export the plan as a Garmin structured cycling workout in Garmin's NATIVE
+    schema — the MCP's manage_workouts passes workout_data straight through to
+    connectapi.garmin.com/workout-service/workout, and the old simplified
+    {workoutName, sportType, steps} shape returns a bare 500 (Appendix A Step F,
+    verified 2026-08-12). One power-target step per climb + steady blocks between,
+    course-derived steps distance-based, final cooldown time-based (600 s)."""
     steps = []
     order = 1
     # simple approach: a step per climb (target = climb avg ±) and steady steps between
@@ -189,26 +224,36 @@ def garmin_workout(plan: dict, name: str) -> dict:
     covered = 0.0
     for cr in climbs:
         # steady lead-in up to this climb — distance is the gap since the last
-        # climb ended. Emitting meters=None here produced a malformed
+        # climb ended. Emitting a null distance here produced a malformed
         # distance-duration step that Garmin rejects (fixed 2026-08-07).
         lead_m = round(cr["start_m"] - covered)
         if lead_m > 0:
-            steps.append({"stepOrder": order, "type": "interval", "durationType": "distance",
-                          "meters": lead_m, "targetType": "power.zone",
-                          "targetLow": int(steady * 0.9), "targetHigh": int(steady * 1.05),
-                          "description": "Steady — hold target, spin ≥85 rpm on the flats"})
+            steps.append(_garmin_step(
+                order, "interval", "distance", lead_m,
+                int(steady * 0.9), int(steady * 1.05),
+                "Steady — hold target, spin ≥85 rpm on the flats"))
             order += 1
         covered = cr["start_m"] + cr["length_m"]
-        steps.append({"stepOrder": order, "type": "interval", "durationType": "distance",
-                      "meters": round(cr["length_m"]), "targetType": "power.zone",
-                      "targetLow": int(cr["power_w"] * 0.95), "targetHigh": int(cr["power_w"] * 1.05),
-                      "description": f"{cr['name']} — {cr['avg_grade']}% for {cr['length_m']}m @ ~{cr['power_w']}W ({cr['wkg']} W/kg)"})
+        steps.append(_garmin_step(
+            order, "interval", "distance", round(cr["length_m"]),
+            int(cr["power_w"] * 0.95), int(cr["power_w"] * 1.05),
+            f"{cr['name']} — {cr['avg_grade']}% for {cr['length_m']}m @ ~{cr['power_w']}W ({cr['wkg']} W/kg)"))
         order += 1
-    steps.append({"stepOrder": order, "type": "cooldown", "durationType": "open",
-                  "targetType": "power.zone", "targetLow": int(steady * 0.85),
-                  "targetHigh": int(steady * 1.02), "description": "Run it home at target"})
-    return {"workoutName": name, "sportType": "cycling", "steps": steps,
-            "estimated_time_s": plan["time_s"], "note": "targets in watts; push via manage_workouts upload+schedule"}
+    steps.append(_garmin_step(order, "cooldown", "time", 600,
+                              int(steady * 0.85), int(steady * 1.02),
+                              "Run it home at target"))
+    return {
+        "sportType": dict(_GARMIN_SPORT),
+        "subSportType": None,
+        "workoutName": name,
+        "description": (f"{plan['total_km']} km / {plan['gain_m']} m — "
+                        f"NP {plan['np']} W (IF {plan['if']}), ~{plan['time_str']}. "
+                        "Targets in watts; push via manage_workouts upload+schedule."),
+        "workoutSegments": [{"segmentOrder": 1, "sportType": dict(_GARMIN_SPORT),
+                             "workoutSteps": steps}],
+        "avgTrainingSpeed": None,
+        "estimatedDurationInSecs": int(round(plan["time_s"])),
+    }
 
 
 def render_html(plan: dict, title: str) -> str:
@@ -230,7 +275,7 @@ def render_html(plan: dict, title: str) -> str:
     gd = plan.get("grad_dist", {})
     gd_rows = "".join(
         f"<tr><td>{name}</td><td>{d['pct_time']}%</td><td>{d['dist_km']} km</td>"
-        f"<td>{d['avg_power_w']} W</td><td>{round(d['avg_power_w']/rd['mass_kg'],2)}</td>"
+        f"<td>{d['avg_power_w']} W</td><td>{round(d['avg_power_w']/rd.get('body_mass_kg', rd['mass_kg']),2)}</td>"
         f"<td>{d['avg_speed_kmh']} km/h</td>"
         f"<td><span style='display:inline-block;height:9px;border-radius:3px;background:var(--ac);"
         f"width:{max(2,round(d['pct_time']*1.6))}px'></span></td></tr>"
@@ -238,6 +283,9 @@ def render_html(plan: dict, title: str) -> str:
     ) or "<tr><td colspan=7 class=muted>—</td></tr>"
 
     # race-day cheat sheet: glanceable per-climb power card + key numbers
+    method = ("Pacing is a true time-minimizing optimizer (W'bal dynamic programming over "
+              "the critical-power model)." if plan.get("strategy") == "optimized" else
+              "Pacing is a grade-banded heuristic scaled to target NP — a v1, not a full optimizer.")
     cheat_climbs = "".join(
         f"<div class='cc'><b>{c['name']}</b><span>{c['power_w']} W · {c['wkg']} W/kg · "
         f"{c['avg_grade']}% · {c['time_min']} min</span></div>"
@@ -310,7 +358,7 @@ li{{font-size:13.5px;color:var(--mut)}} .fuel{{display:grid;grid-template-column
 </div><ul style="margin-top:10px">{notes}</ul></div>
 <div class="card"><h2>Segment power targets (sampled)</h2>
 <table><tr><th>km</th><th>grade</th><th>target W</th><th>km/h</th></tr>{seg_rows}</table></div>
-<div class="sub" style="margin-top:20px">Generated by the coach bikeplan tool. Pacing is a grade-banded heuristic scaled to target NP — a v1, not a full optimizer. Physics: gravity + rolling + aero + drivetrain.</div>
+<div class="sub" style="margin-top:20px">Generated by the coach bikeplan tool. {method} Physics: gravity + rolling + aero + drivetrain.</div>
 </div></body></html>"""
 
 
@@ -353,7 +401,8 @@ def main():
               f"building plan at that intensity.")
 
     plan = make_plan(course, rider, target_if, a.temp, a.elevation, a.headwind,
-                     strategy=a.strategy, w_prime_j=a.w_prime, cp_w=a.cp)
+                     strategy=a.strategy, w_prime_j=a.w_prime, cp_w=a.cp,
+                     body_mass_kg=a.weight_lb * LB_TO_KG)
 
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w") as fh:

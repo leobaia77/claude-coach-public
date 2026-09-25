@@ -87,7 +87,7 @@ def optimize(course, rider: Rider, rho: float, target_avg_w: float,
 
     step = w_prime / (K_W - 1)
     def to_bin(w):
-        b = int(round(w / step))
+        b = int(w // step)
         return 0 if b < 0 else (K_W - 1 if b > K_W - 1 else b)
 
     INF = float("inf")

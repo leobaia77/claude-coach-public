@@ -23,31 +23,42 @@ def token():
           '-d',f"client_id={c['clientId']}",'-d',f"client_secret={c['clientSecret']}",
           '-d','grant_type=refresh_token','-d',f"refresh_token={c['refreshToken']}"],
           capture_output=True,text=True).stdout
-        d=json.loads(o)
+        if not o.strip(): sys.exit('strava token refresh returned no output — curl failed')
+        try: d=json.loads(o)
+        except ValueError: sys.exit('strava token refresh unparseable: '+o[:200])
         if 'access_token' not in d: sys.exit('strava refresh failed: '+o[:200])
         c.update(accessToken=d['access_token'],refreshToken=d['refresh_token'],expiresAt=d['expires_at'])
-        json.dump(c,open(CFG,'w'),indent=2)
+        tmp=CFG+'.tmp'
+        json.dump(c,open(tmp,'w'),indent=2)
+        os.replace(tmp,CFG)
     return c['accessToken']
 
 def smooth(a,w):
     a=np.nan_to_num(np.array(a,dtype=float)); return np.convolve(a,np.ones(w)/w,mode='same')
 
+ATH=os.path.join(ROOT,'metrics','athlete.json')
+ath=json.load(open(ATH)) if os.path.exists(ATH) else {}
 ap=argparse.ArgumentParser()
 ap.add_argument('--date',required=True); ap.add_argument('--strava-id',required=True)
 ap.add_argument('--start',required=True,help='local HH:MM of ride start')
-ap.add_argument('--ftp',type=float,default=273)
+ap.add_argument('--ftp',type=float,default=ath.get('ftp_w'))
 a=ap.parse_args(); D=a.date
+if a.ftp is None: sys.exit('--ftp required (metrics/athlete.json not found)')
 hh,mm=a.start.split(':'); START=int(hh)*3600+int(mm)*60
 
 tok=token()
 raw=subprocess.run(['curl','-s','-H',f'Authorization: Bearer {tok}',
   f'https://www.strava.com/api/v3/activities/{a.strava_id}/streams'
-  '?keys=time,watts,heartrate,altitude&key_by_type=true'],capture_output=True,text=True).stdout
-d=json.loads(raw)
+  '?keys=time,watts,heartrate,altitude,distance&key_by_type=true'],capture_output=True,text=True).stdout
+if not raw.strip(): sys.exit('strava streams fetch returned no output — curl failed')
+try: d=json.loads(raw)
+except ValueError: sys.exit('strava streams fetch unparseable: '+raw[:200])
 if 'time' not in d: sys.exit('no streams: '+raw[:200])
 t=np.array(d['time']['data']); clock=(START+t)/3600.
+if not d.get('watts',{}).get('data'): sys.exit('no power stream on this activity — power is required for this chart')
 w=np.array([x or 0 for x in d['watts']['data']],dtype=float)
-h=np.array([x if x else np.nan for x in d['heartrate']['data']],dtype=float)
+hr=d.get('heartrate',{}).get('data')
+h=np.array([x if x else np.nan for x in hr],dtype=float) if hr else None
 alt=np.array([x if x else np.nan for x in d.get('altitude',{}).get('data',[np.nan]*len(t))],dtype=float)
 
 gp=os.path.join(ROOT,'metrics','glucose_raw.csv')
@@ -62,7 +73,12 @@ fig,(axE,ax)=plt.subplots(2,1,figsize=(14,8.5),height_ratios=[1,4],sharex=True)
 ride=next((r for r in csv.DictReader(open(os.path.join(ROOT,'metrics','rides.csv')))
            if r['date']==D),{}) if os.path.exists(os.path.join(ROOT,'metrics','rides.csv')) else {}
 sub=f"IF {ride.get('if_','?')} · NP {ride.get('np_w','?')} W · TSS {ride.get('tss','?')} · TE {ride.get('te_aerobic','?')}" if ride else ''
-fig.suptitle(f"Ride — {D} · {ride.get('name','')} · {ride.get('dist_mi','?')} mi / {ride.get('gain_ft','?')} ft",
+dist_mi=ride.get('dist_mi')
+if not dist_mi and d.get('distance',{}).get('data'): dist_mi=f"{d['distance']['data'][-1]/1609.344:.1f}"
+gain_ft=ride.get('gain_ft')
+if not gain_ft and not np.all(np.isnan(alt)):
+    dz=np.diff(alt[np.isfinite(alt)]); gain_ft=f"{dz[dz>0].sum()*3.28084:.0f}"
+fig.suptitle(f"Ride — {D} · {ride.get('name','')} · {dist_mi or '?'} mi / {gain_ft or '?'} ft",
              fontsize=15,fontweight='bold',y=.97,color=TX)
 axE.set_title(sub,fontsize=10.5,color=MUT,pad=6)
 if not np.all(np.isnan(alt)):
@@ -75,8 +91,9 @@ ax.plot(clock,smooth(w,30),color=PW,lw=1.3)
 ax.axhline(a.ftp,color=PW,ls=':',lw=1.2,alpha=.75)
 ax.text(lo_x+.05,a.ftp+10,f'FTP {a.ftp:.0f} W',color=PW,fontsize=8.5)
 ax.set_ylabel('Power (W)',color=PW); ax.set_ylim(0,max(620,np.nanmax(smooth(w,30))*1.25)); ax.grid(alpha=.25)
-axH=ax.twinx(); axH.plot(clock,smooth(h,20),color=HRC,lw=1.5)
-axH.set_ylabel('HR (bpm)',color=HRC); axH.set_ylim(55,200)
+if h is not None:
+    axH=ax.twinx(); axH.plot(clock,smooth(h,20),color=HRC,lw=1.5)
+    axH.set_ylabel('HR (bpm)',color=HRC); axH.set_ylim(55,200)
 axG=ax.twinx(); axG.spines['right'].set_position(('outward',52))
 axG.set_ylabel('Glucose (mg/dL)',color=GL); axG.set_ylim(55,150)
 if gt:
@@ -99,9 +116,9 @@ ax.axvspan(clock[0],clock[-1],color=WARN,alpha=.05,zorder=0)
 ax.set_xlim(lo_x,hi_x); ax.set_xlabel('Time of day')
 tk=np.arange(np.floor(lo_x*2)/2,hi_x,.5); ax.set_xticks(tk)
 ax.set_xticklabels([f'{int(v):02d}:{int((v%1)*60):02d}' for v in tk])
-ax.legend(handles=[plt.Line2D([],[],color=PW,lw=2.5,label='Power (30 s avg)'),
-                   plt.Line2D([],[],color=HRC,lw=2.5,label='Heart rate'),
-                   plt.Line2D([],[],color=GL,lw=2.5,marker='o',label='Glucose')],
+ax.legend(handles=[plt.Line2D([],[],color=PW,lw=2.5,label='Power (30 s avg)')]
+                 +([plt.Line2D([],[],color=HRC,lw=2.5,label='Heart rate')] if h is not None else [])
+                 +[plt.Line2D([],[],color=GL,lw=2.5,marker='o',label='Glucose')],
           loc='upper left',facecolor=CARD,edgecolor=GRID,labelcolor=TX,fontsize=9.5)
 fig.tight_layout(rect=[0,0.01,1,0.95])
 out=os.path.join(ROOT,'charts',f'{D}_ride_power_hr_glucose.png')

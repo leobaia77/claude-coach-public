@@ -13,16 +13,36 @@ from bikeplan.physics import normalized_power, tss as _tss
 from bikeplan.analyze import mean_max_power, gradient_distribution
 
 
+def _dt_list(dt, n):
+    return [float(dt)] * n if isinstance(dt, (int, float)) else [float(d) for d in dt[:n]]
+
+
+def _resample_1hz(values, dt_list):
+    """Repeat each sample for its dt (rounded, min 1 s) so downstream windowed math
+    (30 s NP window, mean-max, half-splits) sees a ~1 Hz stream regardless of the
+    recording interval."""
+    if all(abs(d - 1.0) < 1e-9 for d in dt_list):
+        return list(values)
+    out = []
+    for v, d in zip(values, dt_list):
+        out.extend([v] * max(1, int(round(d))))
+    return out
+
+
 def decoupling(power_w, hr_bpm, dt=1.0) -> float:
     """Pw:HR decoupling %: how much aerobic efficiency (power/HR) fell from the first half
-    to the second. >5% developing, >10% base needs work. Positive = HR drifted up for the
-    same power (fatigue)."""
+    to the second (halves split by ride TIME, honouring dt). >5% developing, >10% base
+    needs work. Positive = HR drifted up for the same power (fatigue)."""
     n = min(len(power_w), len(hr_bpm))
+    dts = _dt_list(dt, n)
+    pw = _resample_1hz(power_w[:n], dts)
+    hr = _resample_1hz(hr_bpm[:n], dts)
+    n = len(pw)
     if n < 4:
         return 0.0
     half = n // 2
     def ef(a, b):
-        p = sum(power_w[a:b]); h = sum(hr_bpm[a:b])
+        p = sum(pw[a:b]); h = sum(hr[a:b])
         return (p / (b - a)) / (h / (b - a)) if h > 0 else 0.0
     ef1, ef2 = ef(0, half), ef(half, n)
     return round((ef1 - ef2) / ef1 * 100, 1) if ef1 > 0 else 0.0
@@ -49,10 +69,11 @@ def evaluate_ride(stream, ftp_w: float, mass_kg: float | None = None) -> dict:
     pw = stream["power_w"]
     dt = stream.get("dt", 1.0)
     n = len(pw)
-    dt_list = [float(dt)] * n if isinstance(dt, (int, float)) else dt
+    dt_list = _dt_list(dt, n)
     dur_s = sum(dt_list)
     avg = sum(pw[i] * dt_list[i] for i in range(n)) / dur_s if dur_s else 0.0
-    np_ = normalized_power(pw)
+    pw_1hz = _resample_1hz(pw, dt_list)
+    np_ = normalized_power(pw_1hz)
     if_ = np_ / ftp_w if ftp_w else 0.0
     out = {
         "duration_s": round(dur_s),
@@ -63,14 +84,17 @@ def evaluate_ride(stream, ftp_w: float, mass_kg: float | None = None) -> dict:
         "vi": round(np_ / avg, 3) if avg else 0.0,        # variability index
         "tss": round(_tss(np_, if_, dur_s, ftp_w)) if ftp_w else None,
         "work_kj": round(avg * dur_s / 1000),
-        "peak_power_curve": mean_max_power(pw, dt=dt_list[0] if dt_list else 1.0),
+        "peak_power_curve": mean_max_power(pw_1hz, dt=1.0),
     }
     if mass_kg:
         out["wkg_avg"] = round(avg / mass_kg, 2)
         out["wkg_np"] = round(np_ / mass_kg, 2)
     if stream.get("hr_bpm"):
-        out["avg_hr"] = round(sum(stream["hr_bpm"]) / len(stream["hr_bpm"]))
-        out["decoupling_pct"] = decoupling(pw, stream["hr_bpm"], dt)
+        hr = stream["hr_bpm"]
+        m = min(len(hr), n)
+        hr_dur = sum(dt_list[:m])
+        out["avg_hr"] = round(sum(hr[i] * dt_list[i] for i in range(m)) / hr_dur) if hr_dur else 0
+        out["decoupling_pct"] = decoupling(pw, hr, dt_list)
     if stream.get("grade") is not None and stream.get("speed_mps") is not None:
         out["terrain"] = gradient_distribution(_stream_segments(stream, dt))
     return out
@@ -95,6 +119,15 @@ if __name__ == "__main__":
     # a surgy ride has VI > 1
     surgy = {"power_w": ([100]*1800 + [300]*1800)}
     assert evaluate_ride(surgy, ftp_w=273)["vi"] > 1.03
+    # dt-awareness: a 30 s-sampled recording must evaluate like its 1 Hz expansion
+    alt = {"power_w": [100, 300] * 60, "hr_bpm": [120, 150] * 60, "dt": 30.0}
+    alt_1hz = {"power_w": [p for p in [100, 300] * 60 for _ in range(30)],
+               "hr_bpm": [h for h in [120, 150] * 60 for _ in range(30)], "dt": 1.0}
+    ea, e1 = evaluate_ride(alt, ftp_w=273), evaluate_ride(alt_1hz, ftp_w=273)
+    assert ea["np_w"] == e1["np_w"] and ea["duration_s"] == e1["duration_s"], (ea, e1)
+    assert ea["avg_hr"] == e1["avg_hr"] == 135, (ea["avg_hr"], e1["avg_hr"])
+    assert ea["decoupling_pct"] == e1["decoupling_pct"], (ea, e1)
+    assert ea["peak_power_curve"][30] == e1["peak_power_curve"][30] == 300, ea["peak_power_curve"]
     print("NP", ev["np_w"], "IF", ev["if"], "VI", ev["vi"], "TSS", ev["tss"],
           "decoup", ev["decoupling_pct"], "%", "W/kg-NP", ev["wkg_np"])
     print("peak power curve:", {k: v for k, v in ev["peak_power_curve"].items() if k != "_ride_s"})

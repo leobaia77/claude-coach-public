@@ -12,7 +12,7 @@
  *         metrics/glucose_overnight.csv  (one summary row per night)
  */
 import { spawn } from 'child_process';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, renameSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -23,6 +23,7 @@ const MCP = process.env.LIBRELINK_MCP_PATH
   || join(process.env.HOME || '', 'projects', 'librelink-mcp-server', 'dist', 'index.js');
 const RAW  = join(ROOT, 'metrics', 'glucose_raw.csv');
 const NIGHT= join(ROOT, 'metrics', 'glucose_overnight.csv');
+const LOG_FILE = join(ROOT, 'metrics', 'capture.log');
 const args = process.argv.slice(2);
 const HOURS = Number(args[args.indexOf('--hours') + 1]) || 14;
 const QUIET = args.includes('--quiet');
@@ -38,6 +39,7 @@ function callMcp(tool, argsObj, waitMs = 9000) {
     // silently losing every scheduled capture. process.execPath is the absolute path of
     // the node binary already running this script.
     const srv = spawn(process.execPath, [MCP], { stdio: ['pipe', 'pipe', 'pipe'] });
+    srv.on('error', e => reject(e));
     let buf = ''; const res = [];
     const send = o => srv.stdin.write(JSON.stringify(o) + '\n');
     srv.stdout.on('data', d => {
@@ -59,8 +61,11 @@ function callMcp(tool, argsObj, waitMs = 9000) {
       const r = res.find(x => x.id === 2);
       if (!r) return reject(new Error('no MCP response. stderr: ' + stderr.slice(0, 400)));
       if (r.error) return reject(new Error(JSON.stringify(r.error).slice(0, 400)));
-      try { resolve(JSON.parse(r.result.content[0].text)); }
-      catch (e) { reject(new Error('unparseable: ' + r.result?.content?.[0]?.text?.slice(0,200))); }
+      const text = r.result?.content?.[0]?.text ?? '';
+      if (r.result?.isError || /^Error\b/.test(text.trim()))
+        return reject(new Error(text.trim().replace(/^Error:\s*/, '').slice(0, 400)));
+      try { resolve(JSON.parse(text)); }
+      catch (e) { reject(new Error('unparseable: ' + text.slice(0, 200))); }
     }, waitMs);
   });
 }
@@ -96,7 +101,8 @@ function loadCsv(path) {
               r.value, r.trend || ''].join(','); });
   const header = 'timestamp_utc,local_date,local_time,mg_dl,trend';
   const allRows = existing.rows.map(r => r.join(',')).concat(fresh).sort();
-  writeFileSync(RAW, header + '\n' + allRows.join('\n') + '\n');
+  writeFileSync(RAW + '.tmp', header + '\n' + allRows.join('\n') + '\n');
+  renameSync(RAW + '.tmp', RAW);
   log(`archive: +${fresh.length} new  → ${allRows.length} total rows`);
 
   // ---- 2. summarise the most recent complete night ----
@@ -106,8 +112,8 @@ function loadCsv(path) {
     if (L.hour >= SLEEP_END && L.hour < 20) continue;         // daytime — skip
     // attribute 20:00-23:59 to the NEXT calendar date so a night is one bucket
     let night = L.date;
-    if (L.hour >= 20) { const dt = new Date(L.date + 'T12:00:00'); dt.setDate(dt.getDate()+1);
-                        night = dt.toISOString().slice(0,10); }
+    if (L.hour >= 20) { const [y, m, dd] = L.date.split('-').map(Number);
+                        night = new Date(Date.UTC(y, m - 1, dd + 1)).toISOString().slice(0,10); }
     (byNight[night] ||= []).push({ ...L, v: r.value, ts: r.timestamp });
   }
   const nights = Object.keys(byNight).sort();
@@ -115,6 +121,14 @@ function loadCsv(path) {
   const pts = (byNight[target] || []).filter(p => p.hour >= SLEEP_START && p.hour < SLEEP_END)
                                      .sort((a,b) => a.ts.localeCompare(b.ts));
   if (pts.length < 12) { log(`night ${target}: only ${pts.length} in-window readings — not summarising`); process.exit(0); }
+  const ex = loadCsv(NIGHT);
+  const stored = ex.rows.find(r => r[0] === target);
+  const storedN = stored ? (parseInt(stored[1], 10) || 0) : 0;
+  const fromMidnight = pts[0].hour === 0 && pts[0].min <= 10;
+  if (stored && !fromMidnight && pts.length < storedN) {
+    log(`night ${target}: window starts ${String(pts[0].hour).padStart(2,'0')}:${String(pts[0].min).padStart(2,'0')} with ${pts.length} readings < stored ${storedN} — keeping stored row`);
+    process.exit(0);
+  }
 
   const vals = pts.map(p => p.v);
   const mean = vals.reduce((a,b)=>a+b,0)/vals.length;
@@ -141,9 +155,9 @@ function loadCsv(path) {
     sleep_h:'', deep_min:'', rem_min:'', efficiency:'', awakenings:'', hrv:''
   };
   const NHEAD = Object.keys(row).join(',');
-  const ex = loadCsv(NIGHT);
   const keep = ex.rows.filter(r => r[0] !== target).map(r => r.join(','));
-  writeFileSync(NIGHT, NHEAD + '\n' + keep.concat(Object.values(row).join(',')).sort().join('\n') + '\n');
+  writeFileSync(NIGHT + '.tmp', NHEAD + '\n' + keep.concat(Object.values(row).join(',')).sort().join('\n') + '\n');
+  renameSync(NIGHT + '.tmp', NIGHT);
 
   log(`\n=== NIGHT OF ${target} (${SLEEP_START}:00–${SLEEP_END}:00 local) ===`);
   log(`  readings ${row.n_readings} · mean ${row.mean} · SD ${row.sd} · CV ${row.cv_pct}%`);
@@ -151,4 +165,15 @@ function loadCsv(path) {
   log(`  sleep-onset ${row.at_sleep_onset} → wake ${row.at_wake} · dawn rise +${row.dawn_rise}`);
   log(`  time <80: ${row.min_below_80} min · <70: ${row.min_below_70} min · excursions: ${row.excursions}`);
   log(`\n  archive: metrics/glucose_raw.csv · nightly: metrics/glucose_overnight.csv`);
-})().catch(e => { console.error('CAPTURE FAILED:', e.message); process.exit(1); });
+})().catch(e => {
+  if (e.message.includes('Failed to read glucose history')) {
+    const raw = loadCsv(RAW);
+    const last = raw.rows[raw.rows.length - 1];
+    const line = `SENSOR OFFLINE (Failed to read glucose history) — last archived ${last ? last[1] + ' ' + last[2] : 'never'}`;
+    const prev = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, 'utf8').trimEnd().split('\n').pop() : '';
+    if (prev !== line) appendFileSync(LOG_FILE, line + '\n');
+    log(line);
+    process.exit(1);
+  }
+  console.error('CAPTURE FAILED:', e.message); process.exit(1);
+});

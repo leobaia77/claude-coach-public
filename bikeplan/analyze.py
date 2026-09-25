@@ -6,7 +6,7 @@ Three functions, all pure (operate on plain arrays the coach pulls from Garmin/S
   - mean_max_power        : power-duration curve (best avg power over each duration window)
   - plan_vs_actual        : align a committed plan to the executed ride → per-band + total deltas
 
-These directly serve Leo's documented overreach/pacing pattern: did he ride the plan, or
+These serve a documented overreach/pacing pattern: did he ride the plan, or
 blow the early climbs and fade?
 """
 from __future__ import annotations
@@ -116,7 +116,7 @@ def plan_vs_actual(plan_segments, actual_stream, mass_kg=None):
         plan_w = p["avg_power_w"] if p else None
         bands[name] = {
             "plan_w": plan_w, "actual_w": actual_w,
-            "delta_w": (actual_w - plan_w) if (plan_w and actual_w) else None,
+            "delta_w": (actual_w - plan_w) if (plan_w is not None and actual_w is not None) else None,
             "plan_kmh": p["avg_speed_kmh"] if p else None, "actual_kmh": actual_kmh,
             "actual_time_s": round(a["time_s"]),
         }

@@ -1,5 +1,5 @@
 """
-Strength math — the numbers behind the 1,000 lb total. All weights in POUNDS (Leo's unit).
+Strength math — the numbers behind the 1,000 lb total. All weights in POUNDS (set the athlete's unit in their wiki §1).
 
 Primary model is the RPE-based %1RM table (RTS / Helms "reps-in-reserve" chart): the
 %-of-1RM you can lift for R reps stopping at a given RPE. This is more accurate than a
@@ -24,14 +24,15 @@ _PCT = {
     8:  [78.6, 77.4, 76.2, 75.1, 73.9, 72.3, 70.7, 69.4, 68.0],
     9:  [76.2, 75.1, 73.9, 72.3, 70.7, 69.4, 68.0, 66.7, 65.3],
     10: [73.9, 72.3, 70.7, 69.4, 68.0, 66.7, 65.3, 64.0, 62.6],
-    11: [71.7, 70.1, 68.5, 67.2, 65.9, 64.6, 63.3, 62.0, 60.7],
-    12: [69.4, 67.8, 66.2, 64.9, 63.6, 62.3, 61.0, 59.8, 58.6],
+    11: [70.7, 69.4, 68.0, 66.7, 65.3, 64.0, 62.6, 61.3, 59.9],
+    12: [68.0, 66.7, 65.3, 64.0, 62.6, 61.3, 59.9, 58.6, 57.2],
 }
 
 
 def pct_1rm(reps: int, rpe: float) -> float:
     """%1RM for `reps` reps stopping at `rpe`. Interpolates 0.25-RPE granularity;
-    clamps reps to 1..12 and RPE to 6..10."""
+    clamps reps to 1..12 and RPE to 6..10 — a reps>12 set is treated as 12 reps,
+    which UNDERESTIMATES the true 1RM (e1rm() flags this via `.clamped`)."""
     reps = max(1, min(12, int(reps)))
     rpe = max(6.0, min(10.0, float(rpe)))
     row = _PCT[reps]
@@ -44,10 +45,20 @@ def pct_1rm(reps: int, rpe: float) -> float:
     return round(row[lo] + (row[lo + 1] - row[lo]) * frac, 2)
 
 
+class E1RM(float):
+    """A float e1RM estimate; `clamped` is True when reps>12 forced a table clamp
+    (the estimate is then a floor, not a point estimate)."""
+    clamped: bool = False
+
+
 def e1rm(weight_lb: float, reps: int, rpe: float = 9.0) -> float:
-    """Estimated 1RM from a set of `reps` @ `weight_lb` stopping at `rpe` (RTS table)."""
+    """Estimated 1RM from a set of `reps` @ `weight_lb` stopping at `rpe` (RTS table).
+    Returns an E1RM float; `.clamped` is True when reps>12 (table clamped to 12 —
+    treat the result as a lower bound)."""
     p = pct_1rm(reps, rpe)
-    return round(weight_lb / (p / 100.0), 1)
+    v = E1RM(round(weight_lb / (p / 100.0), 1))
+    v.clamped = reps > 12
+    return v
 
 
 def epley_1rm(weight_lb: float, reps: int) -> float:
@@ -91,7 +102,7 @@ def next_progression(current_lb: float, lift: str = "lower", last_rpe: float = 8
     if step_lb is None:
         step_lb = 5.0 if lift.startswith("low") else 2.5
     if last_rpe >= 9.0:
-        return round_to_plate(current_lb * 0.90, 5.0)     # deload
+        return round_to_plate(current_lb * 0.90, step_lb)  # deload
     if last_rpe >= 8.5:
         return round_to_plate(current_lb, step_lb)        # hold
     return round_to_plate(current_lb + step_lb, step_lb)  # progress
@@ -111,6 +122,12 @@ if __name__ == "__main__":
     assert abs(working_weight(rm, 3, 9) - 315) <= 5, working_weight(rm, 3, 9)
     # monotonicity: more reps at same RPE -> lower %1RM
     assert pct_1rm(1, 8) > pct_1rm(5, 8) > pct_1rm(10, 8)
+    # diagonal identity across the whole table: pct(r, rpe) == pct(r+1, rpe+1)
+    for _r in range(1, 12):
+        for _k in range(len(_RPES) - 2):
+            assert _PCT[_r + 1][_k] == _PCT[_r][_k + 2], (_r, _k)
+    # reps>12 clamp is detectable
+    assert e1rm(200, 15).clamped and not e1rm(315, 3, 9).clamped
     # total + gap
     g = gap_to(1000, squat_lb=355, bench_lb=300, deadlift_lb=385)
     assert g["total"] == 1040.0 and g["gap"] == -40.0, g
@@ -119,6 +136,7 @@ if __name__ == "__main__":
     assert next_progression(315, "lower", 8.5) == 315    # hold
     assert next_progression(300, "lower", 9.5) == 270    # deload -10%
     assert next_progression(200, "upper", 7.0) == 202.5  # +2.5 upper
+    assert next_progression(202.5, "upper", 9.5) == 182.5  # upper deload keeps 2.5 rounding
     # cross-checks differ from RTS by design (they assume failure)
     print(f"315x3@RPE9  RTS e1RM {e1rm(315,3,9)}  Epley {epley_1rm(315,3)}  Brzycki {brzycki_1rm(315,3)}")
     print(f"gap to 1000 from S355/B300/DL385: total {g['total']} ({g['pct_of_target']}%), gap {g['gap']}")

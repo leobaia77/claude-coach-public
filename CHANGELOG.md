@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.1.0] — 2026-09-26
+
+**Shared repo is now functionality-only — no UI.**
+- Removed `dashboard/` and `railway.json` from the published tree, plus the files that only
+  made sense alongside them (`coach_bridge.py`, `render_chart.py`, `/audit-app`, `launch.json`).
+  The coach is complete without a UI; you talk to it through Claude Code.
+- **`CLAUDE.md` is now GENERATED** from the maintainer's copy by `make_public_claude.py`, so the
+  shared coaching logic can no longer drift. The previous hand-maintained copy was six weeks
+  behind. Athlete-specific IDs become placeholders; the CGM section ships the *method* for
+  deriving glucose rules instead of one athlete's conclusions.
+- **New `SETUP.md`** — integration-by-integration setup (Garmin, Strava, Hevy, biometrics,
+  calendar, optional CGM), dependency checks, and a troubleshooting table.
+- **New `FIRST_RUN.md`** — onboarding instructions addressed to Claude: probe which integrations
+  actually answered, pull real baselines rather than asking the athlete to type them, interview
+  for goals and constraints, build the wiki, agree recovery gates, propose week one.
+- Ships everything added since 1.1: air-quality watch, sleep archiving/plots, state builder,
+  nightly consolidation, `recall.sh`, ride/day/climb charts, report generator.
+- Generic modules no longer name the maintainer's athlete in docstrings.
+
+
 All notable changes to claude-coach. Format follows [Keep a Changelog](https://keepachangelog.com/);
 versioning is [semver](https://semver.org/).
 

@@ -50,6 +50,7 @@ def targets(day_type: str, effort: str = "standard", bodyweight_lb: float | None
         carb = round(carb * s)
         fat = round(fat * s)
         prot = max(PROTEIN_FLOOR_G, round(prot * s))
+        kcal = max(kcal, carb * 4 + prot * 4 + fat * 9)  # floor engaged -> keep kcal >= macro sum
 
     delta = EFFORT_CARB_DELTA.get(effort, 0)
     carb = max(0, carb + delta)
@@ -57,16 +58,15 @@ def targets(day_type: str, effort: str = "standard", bodyweight_lb: float | None
 
     applied_deficit = 0.0
     if deficit_kcal > 0:
-        # trim fat first (down to a 50 g floor), then carbs, never protein
+        # trim fat first (down to a 50 g floor), then carbs (down to 0), never protein;
+        # the applied deficit is capped at what those floors can absorb
         fat_floor = 50
-        cut = deficit_kcal
-        cut_fat = min(cut, max(0, (fat - fat_floor) * 9))
+        cut_fat = min(deficit_kcal, max(0, (fat - fat_floor) * 9))
+        cut_carb = min(deficit_kcal - cut_fat, carb * 4)
         fat -= round(cut_fat / 9)
-        cut -= cut_fat
-        if cut > 0:
-            carb = max(0, carb - round(cut / 4))
-        kcal = round(kcal - deficit_kcal)
-        applied_deficit = deficit_kcal
+        carb -= round(cut_carb / 4)
+        applied_deficit = cut_fat + cut_carb
+        kcal = round(kcal - applied_deficit)
 
     return {"day_type": day_type, "effort": effort, "kcal": kcal, "carbs_g": carb,
             "protein_g": prot, "fat_g": fat, "protein_floor_ok": prot >= PROTEIN_FLOOR_G,
@@ -96,14 +96,20 @@ if __name__ == "__main__":
     # bodyweight scaling up for a bigger athlete raises carbs & kcal
     big = targets("strength", bodyweight_lb=260)
     assert big["carbs_g"] > 200 and big["kcal"] > targets("strength")["kcal"], big
-    # protein floor holds when scaling down
+    # protein floor holds when scaling down — and kcal never falls below the macro sum
     small = targets("rest", bodyweight_lb=170)
     assert small["protein_g"] >= PROTEIN_FLOOR_G, small
+    assert small["kcal"] >= small["carbs_g"] * 4 + small["protein_g"] * 4 + small["fat_g"] * 9, small
     # deficit trims fat/carbs, never protein
     d = targets("rest", deficit_kcal=500)
     base = targets("rest")
     assert d["protein_g"] == base["protein_g"] and d["kcal"] < base["kcal"], d
     assert d["protein_floor_ok"], d
+    # an oversized deficit is capped at what the fat/carb floors can absorb
+    huge = targets("rest", deficit_kcal=5000)
+    assert huge["deficit_applied_kcal"] < 5000, huge
+    assert huge["fat_g"] == 50 and huge["carbs_g"] == 0 and huge["protein_g"] == 200, huge
+    assert huge["kcal"] >= huge["carbs_g"] * 4 + huge["protein_g"] * 4 + huge["fat_g"] * 9, huge
     # comparison
     c = compare_to_target(2650, 240, 190, 70, targets("double"))
     assert c["carbs_gap"] == 240 - 260, c

@@ -55,95 +55,34 @@ your personal data (it's untracked). See [CHANGELOG.md](CHANGELOG.md) for releas
 
 ---
 
-## Requirements
+## Getting started
 
-- [Claude Code](https://claude.ai/code) (CLI or desktop app)
-- A Claude account (Pro or above recommended for MCP integrations)
+Two documents do the work:
 
----
+| | |
+|---|---|
+| **[SETUP.md](SETUP.md)** | for **you** — prerequisites, connecting Garmin / Strava / Hevy / biometrics / calendar, and verification. ~40–60 min, mostly authorising integrations. |
+| **[FIRST_RUN.md](FIRST_RUN.md)** | for **Claude** — it probes which integrations actually answered, pulls your real baselines, interviews you about goals and constraints, builds your wiki, and proposes a first week. |
 
-## Step 1 — Clone this repo
-
-```bash
-git clone https://github.com/leobaia77/claude-coach-public.git
-cd claude-coach-public
-```
-
-Or download the ZIP and extract it into a folder.
-
----
-
-## Step 2 — Connect your integrations (MCP servers)
-
-Open **Claude Code** → **Settings** → **Integrations**. Connect the services you use.
-
-### Required (core functionality)
-| Integration | What it's used for |
-|------------|-------------------|
-| **Google Calendar** | Create training events on your private calendar |
-| **Nori** | Biometrics — HRV, sleep, weight, VO2max, activity data |
-
-### Recommended
-| Integration | What it's used for |
-|------------|-------------------|
-| **Garmin Connect** | Cardio sessions in detail — HR, power, training effect/load, performance metrics, HR + power zones — plus upload and scheduling of structured workouts straight to your watch. Recommended for cyclists, runners, and triathletes. *Manual install — see below.* |
-| **Strava** | Segment exploration only — discovering routes, starred segments, and segment efforts on specific rides. Activity metrics come from Garmin Connect. |
-| **Gmail** | Weekly review emails |
-| **Slack** | Check-in messages and confirmations |
-| **Hevy** | Strength training sessions (exercises, sets, reps, weights) |
-
-### Optional
-| Integration | What it's used for |
-|------------|-------------------|
-| **BodySpec** | DEXA body composition scans |
-
-> **Note:** The system works with whatever you have connected. If an integration is missing, that feature is gracefully skipped. You can add integrations later and they'll be picked up automatically.
-
-### Garmin Connect — manual install
-
-Garmin Connect doesn't have an official Claude Code integration. Install the community MCP fork:
+The short version:
 
 ```bash
-git clone https://github.com/leobaia77/garmin-connect-mcp.git ~/projects/garmin-connect-mcp
-uv sync --directory ~/projects/garmin-connect-mcp
-uv run --directory ~/projects/garmin-connect-mcp garmin-connect-mcp-auth   # prompts for Garmin email + password
-claude mcp add --scope user garmin -- uv run --directory ~/projects/garmin-connect-mcp garmin-connect-mcp
-```
-
-Requires Python 3.11+ and [uv](https://github.com/astral-sh/uv). The fork at [leobaia77/garmin-connect-mcp](https://github.com/leobaia77/garmin-connect-mcp) adds `schedule` / `unschedule` actions to `manage-workouts` (not in upstream) so the coach can pin workouts to your Garmin calendar in one step. OAuth tokens persist to `~/.garminconnect/` after first auth.
-
----
-
-## Step 3 — Open the project in Claude Code
-
-```bash
-# In the claude-coach folder:
+git clone https://github.com/leobaia77/claude-coach-public.git ~/Claude-coach
+cd ~/Claude-coach
+python3 -m pip install numpy matplotlib
+./install-garmin.sh            # if you use Garmin
 claude
 ```
 
-Or open the folder via **Claude Code desktop app** → **Open folder**.
-
-The `CLAUDE.md` file activates automatically — Claude will behave as your coach whenever you're in this folder.
-
----
-
-## Step 4 — Run the setup wizard
-
-Type this in Claude Code:
+then tell Claude:
 
 ```
-/coach-setup
+Read FIRST_RUN.md and onboard me.
 ```
 
-The setup wizard will:
-1. Check which integrations are connected
-2. Ask about your sport, goals, training frequency, and body stats
-3. Pull your existing data (biometrics, workouts, DEXA scans if available)
-4. Create your personal athlete wiki at `~/.coach_memory/wiki.md`
-5. Generate personalized daily nutrition targets by day type
-6. Optionally plan your first training week and create calendar events
-
-Setup takes about 5–10 minutes.
+**You don't need every integration.** With Garmin and a calendar it already plans and writes
+your week. Each additional source adds fidelity, and Claude will tell you what each gap costs
+rather than quietly working around it.
 
 ---
 
@@ -165,20 +104,28 @@ This triggers the full coaching cycle:
 
 ---
 
-## File Structure
+## What's in here
 
 ```
 claude-coach/
-├── CLAUDE.md                        # Core coaching instructions (auto-loaded)
-├── README.md                        # This file
-├── LICENSE                          # MIT
-├── .claude/
-│   └── commands/
-│       ├── coach-setup.md           # Onboarding wizard (/coach-setup)
-│       └── weekly-checkin.md        # Weekly coaching cycle (/weekly-checkin)
-└── templates/
-    └── wiki-template.md             # Blank athlete wiki (used by setup)
+├── CLAUDE.md          # the coaching logic — rules, protocols, appendices (auto-loaded)
+├── SETUP.md           # human setup: integrations, deps, verification
+├── FIRST_RUN.md       # onboarding script addressed to Claude
+├── coachcalc/         # deterministic maths — strength e1RM, nutrition, PMC, ride evaluation
+├── bikeplan/          # race/route pacing: W'bal optimiser, CdA calibration, goal-time solver
+├── scripts/           # charts, sleep archiving, recall, state builder, update check
+├── templates/         # blank athlete wiki
+└── .claude/
+    ├── settings.json  # SessionStart + PreCompact hooks
+    └── commands/      # /coach-setup, /weekly-checkin
 ```
+
+**No UI.** This is the coaching engine — you talk to it through Claude Code. All the analysis,
+planning and writeback lives in the files above.
+
+**The maths is in modules, not in the model's head.** `coachcalc` and `bikeplan` are plain,
+dependency-light Python with tests behind them; the coach is instructed to call them and cite
+the output rather than estimate. That's what stops an e1RM or a TSS from being a guess.
 
 **Your athlete data lives outside this repo:**
 - Wiki: `~/.coach_memory/wiki.md` — your persistent coaching memory

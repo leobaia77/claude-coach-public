@@ -27,7 +27,7 @@ Outputs: `<out>.html` (report) + `<out>_garmin.json` (push via the Garmin MCP
 ## Modules
 - `physics.py` — power⇄speed model (gravity + rolling + aero + drivetrain). `python3 -m bikeplan.physics` runs a sanity self-test.
 - `course.py` — GPX parse + resample + grade smoothing + climb detection (>250 m, >3%). Has a synthetic-course generator.
-- `fueling.py` — kJ + duration → carbs/fluid/sodium (Appendix D + Leo's electrolyte rules).
+- `fueling.py` — kJ + duration → carbs/fluid/sodium (Appendix D + the athlete's electrolyte rules).
 - `optimizer.py` — **true time-minimizing optimizer**: W'bal dynamic program over the critical-power model. `python3 -m bikeplan.optimizer` self-tests (must beat constant power, climbs ≥ flats, W'bal-feasible).
 - `goaltime.py` — inverse solver: given a target finish time, bisect the optimizer to the sustainable power (CP/IF) that hits it. `python3 -m bikeplan.goaltime` self-tests (recovers the goal within a minute).
 - `cda.py` — **CdA estimation from a real ride** (whole-ride energy balance / Chung virtual-elevation). Calibrates the optimizer's aero input so predicted times are trustworthy. Self-test round-trips a synthetic ride at known CdA.

@@ -127,10 +127,13 @@ def _detect_climbs(segs: list[Segment]) -> list[Climb]:
                 else:
                     dip = 0
                 j += 1
+            k = j
+            while k > i and segs[k - 1].grade < 0.01:
+                k -= 1
             start = segs[i].start_m
-            end = segs[j - 1].start_m + segs[j - 1].length_m
+            end = segs[k - 1].start_m + segs[k - 1].length_m
             length = end - start
-            gain = sum(s.grade * s.length_m for s in segs[i:j] if s.grade > 0)
+            gain = sum(s.grade * s.length_m for s in segs[i:k] if s.grade > 0)
             avg = gain / length if length else 0
             if length >= 250 and avg >= 0.03:
                 climbs.append(Climb(start, end, length, gain, avg))

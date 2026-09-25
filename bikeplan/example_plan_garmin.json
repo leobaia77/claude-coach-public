@@ -1,57 +1,169 @@
 {
+  "sportType": {
+    "sportTypeId": 2,
+    "sportTypeKey": "cycling",
+    "displayOrder": 2
+  },
+  "subSportType": null,
   "workoutName": "Bikeplan Demo (Tier 2)",
-  "sportType": "cycling",
-  "steps": [
+  "description": "40.0 km / 551 m \u2014 NP 232 W (IF 0.848), ~1:37:43. Targets in watts; push via manage_workouts upload+schedule.",
+  "workoutSegments": [
     {
-      "stepOrder": 1,
-      "type": "interval",
-      "durationType": "distance",
-      "meters": null,
-      "targetType": "power.zone",
-      "targetLow": 208,
-      "targetHigh": 243,
-      "description": "Steady \u2014 hold target, spin \u226585 rpm on the flats"
-    },
-    {
-      "stepOrder": 2,
-      "type": "interval",
-      "durationType": "distance",
-      "meters": 5300,
-      "targetType": "power.zone",
-      "targetLow": 217,
-      "targetHigh": 240,
-      "description": "Climb 1 \u2014 5.4% for 5300m @ ~229W (1.96 W/kg)"
-    },
-    {
-      "stepOrder": 3,
-      "type": "interval",
-      "durationType": "distance",
-      "meters": null,
-      "targetType": "power.zone",
-      "targetLow": 208,
-      "targetHigh": 243,
-      "description": "Steady \u2014 hold target, spin \u226585 rpm on the flats"
-    },
-    {
-      "stepOrder": 4,
-      "type": "interval",
-      "durationType": "distance",
-      "meters": 4300,
-      "targetType": "power.zone",
-      "targetLow": 218,
-      "targetHigh": 241,
-      "description": "Climb 2 \u2014 6.1% for 4300m @ ~230W (1.97 W/kg)"
-    },
-    {
-      "stepOrder": 5,
-      "type": "cooldown",
-      "durationType": "open",
-      "targetType": "power.zone",
-      "targetLow": 197,
-      "targetHigh": 236,
-      "description": "Run it home at target"
+      "segmentOrder": 1,
+      "sportType": {
+        "sportTypeId": 2,
+        "sportTypeKey": "cycling",
+        "displayOrder": 2
+      },
+      "workoutSteps": [
+        {
+          "type": "ExecutableStepDTO",
+          "stepId": null,
+          "stepOrder": 1,
+          "stepType": {
+            "stepTypeId": 3,
+            "stepTypeKey": "interval",
+            "displayOrder": 3
+          },
+          "childStepId": null,
+          "description": "Steady \u2014 hold target, spin \u226585 rpm on the flats",
+          "endCondition": {
+            "conditionTypeId": 3,
+            "conditionTypeKey": "distance",
+            "displayOrder": 3,
+            "displayable": true
+          },
+          "endConditionValue": 8000.0,
+          "preferredEndConditionUnit": null,
+          "endConditionCompare": null,
+          "targetType": {
+            "workoutTargetTypeId": 2,
+            "workoutTargetTypeKey": "power.zone",
+            "displayOrder": 2
+          },
+          "targetValueOne": 202.0,
+          "targetValueTwo": 236.0,
+          "zoneNumber": null
+        },
+        {
+          "type": "ExecutableStepDTO",
+          "stepId": null,
+          "stepOrder": 2,
+          "stepType": {
+            "stepTypeId": 3,
+            "stepTypeKey": "interval",
+            "displayOrder": 3
+          },
+          "childStepId": null,
+          "description": "Climb 1 \u2014 5.7% for 5000m @ ~230W (2.13 W/kg)",
+          "endCondition": {
+            "conditionTypeId": 3,
+            "conditionTypeKey": "distance",
+            "displayOrder": 3,
+            "displayable": true
+          },
+          "endConditionValue": 5000.0,
+          "preferredEndConditionUnit": null,
+          "endConditionCompare": null,
+          "targetType": {
+            "workoutTargetTypeId": 2,
+            "workoutTargetTypeKey": "power.zone",
+            "displayOrder": 2
+          },
+          "targetValueOne": 218.0,
+          "targetValueTwo": 241.0,
+          "zoneNumber": null
+        },
+        {
+          "type": "ExecutableStepDTO",
+          "stepId": null,
+          "stepOrder": 3,
+          "stepType": {
+            "stepTypeId": 3,
+            "stepTypeKey": "interval",
+            "displayOrder": 3
+          },
+          "childStepId": null,
+          "description": "Steady \u2014 hold target, spin \u226585 rpm on the flats",
+          "endCondition": {
+            "conditionTypeId": 3,
+            "conditionTypeKey": "distance",
+            "displayOrder": 3,
+            "displayable": true
+          },
+          "endConditionValue": 9000.0,
+          "preferredEndConditionUnit": null,
+          "endConditionCompare": null,
+          "targetType": {
+            "workoutTargetTypeId": 2,
+            "workoutTargetTypeKey": "power.zone",
+            "displayOrder": 2
+          },
+          "targetValueOne": 202.0,
+          "targetValueTwo": 236.0,
+          "zoneNumber": null
+        },
+        {
+          "type": "ExecutableStepDTO",
+          "stepId": null,
+          "stepOrder": 4,
+          "stepType": {
+            "stepTypeId": 3,
+            "stepTypeKey": "interval",
+            "displayOrder": 3
+          },
+          "childStepId": null,
+          "description": "Climb 2 \u2014 6.6% for 4000m @ ~231W (2.14 W/kg)",
+          "endCondition": {
+            "conditionTypeId": 3,
+            "conditionTypeKey": "distance",
+            "displayOrder": 3,
+            "displayable": true
+          },
+          "endConditionValue": 4000.0,
+          "preferredEndConditionUnit": null,
+          "endConditionCompare": null,
+          "targetType": {
+            "workoutTargetTypeId": 2,
+            "workoutTargetTypeKey": "power.zone",
+            "displayOrder": 2
+          },
+          "targetValueOne": 219.0,
+          "targetValueTwo": 242.0,
+          "zoneNumber": null
+        },
+        {
+          "type": "ExecutableStepDTO",
+          "stepId": null,
+          "stepOrder": 5,
+          "stepType": {
+            "stepTypeId": 2,
+            "stepTypeKey": "cooldown",
+            "displayOrder": 2
+          },
+          "childStepId": null,
+          "description": "Run it home at target",
+          "endCondition": {
+            "conditionTypeId": 2,
+            "conditionTypeKey": "time",
+            "displayOrder": 2,
+            "displayable": true
+          },
+          "endConditionValue": 600.0,
+          "preferredEndConditionUnit": null,
+          "endConditionCompare": null,
+          "targetType": {
+            "workoutTargetTypeId": 2,
+            "workoutTargetTypeKey": "power.zone",
+            "displayOrder": 2
+          },
+          "targetValueOne": 191.0,
+          "targetValueTwo": 229.0,
+          "zoneNumber": null
+        }
+      ]
     }
   ],
-  "estimated_time_s": 5844.210190906309,
-  "note": "targets in watts; push via manage_workouts upload+schedule"
+  "avgTrainingSpeed": null,
+  "estimatedDurationInSecs": 5863
 }

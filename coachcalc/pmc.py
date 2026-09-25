@@ -19,14 +19,25 @@ def _alpha(tc: int) -> float:
     return 1.0 - math.exp(-1.0 / tc)
 
 
+class PMCSeries(list):
+    """compute_pmc result: a list of per-day dicts. `warning` is set (else None) when
+    the series is too short/unseeded for the EWMAs to have converged."""
+    warning: str | None = None
+
+
 def compute_pmc(daily_tss, ctl_tc: int = CTL_TC, atl_tc: int = ATL_TC,
                 ctl0: float = 0.0, atl0: float = 0.0):
     """daily_tss: chronological list of daily TSS (fill rest days with 0).
-    Returns list of dicts per day: {tss, ctl, atl, tsb}. TSB uses *yesterday's* CTL−ATL
-    (the standard convention). Seed with ctl0/atl0 if continuing a known history."""
+    Returns a PMCSeries (list) of dicts per day: {tss, ctl, atl, tsb}. TSB uses
+    *yesterday's* CTL−ATL (the standard convention). Seed with ctl0/atl0 if continuing
+    a known history — an unseeded series shorter than 3×ctl_tc sets `.warning`."""
+    daily_tss = list(daily_tss)
     a_ctl, a_atl = _alpha(ctl_tc), _alpha(atl_tc)
     ctl, atl = float(ctl0), float(atl0)
-    out = []
+    out = PMCSeries()
+    if len(daily_tss) < 3 * ctl_tc and ctl0 == 0 and atl0 == 0:
+        out.warning = ("series shorter than 3×CTL time-constant and unseeded — "
+                       "CTL/TSB will be deflated")
     for tss in daily_tss:
         tsb = round(ctl - atl, 1)                 # form = yesterday's fitness − fatigue
         ctl = ctl + (tss - ctl) * a_ctl
@@ -68,6 +79,10 @@ if __name__ == "__main__":
     # ramp rate positive during a build
     build = compute_pmc([40] * 20 + [90] * 14)
     assert ramp_rate(build, 7) > 0, ramp_rate(build, 7)
+    # cold-start guard: short unseeded series warns; long or seeded series doesn't
+    assert compute_pmc([50] * 30).warning is not None
+    assert compute_pmc([50] * 200).warning is None
+    assert compute_pmc([50] * 30, ctl0=60, atl0=55).warning is None
     print(f"steady @80: {pmc[-1]}")
     print(f"after 5x200 block: {block[-1]} -> {form_state(block[-1]['tsb'])}")
     print(f"after 10d taper:   {taper[-1]} -> {form_state(taper[-1]['tsb'])}")
